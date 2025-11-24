@@ -142,3 +142,62 @@ erDiagram
     Orders ||--o{ Order_Details : includes
     Product ||--o{ Order_Details : listed_in
 ```
+
+# 📊 SQL Queries / Reports
+
+### 1. Daily Revenue Report for a Specific Date
+
+```sql
+SELECT 
+    '2025-01-10' AS ReportDate,
+    SUM(TotalAmount) AS TotalRevenue
+FROM Orders
+WHERE OrderDate = '2025-01-10';
+```
+### 2. Monthly Top-Selling Products
+
+```sql
+SELECT TOP 5 
+    p.name, 
+    od.product_id,
+    COUNT(od.product_id) AS SalesCount
+FROM Order_Details od
+JOIN Product p ON od.product_id = p.product_id
+GROUP BY od.product_id, p.name
+ORDER BY SalesCount DESC;
+
+```
+### 3. Customers with Orders Totaling More Than $500 in the Past Month
+
+```sql
+SELECT 
+    c.customer_id,
+    c.first_name + ' ' + c.last_name AS FullName,
+    SUM(o.total_amount) AS total_price
+FROM Customer c
+JOIN Orders o ON c.customer_id = o.customer_id
+GROUP BY c.customer_id, c.first_name, c.last_name
+HAVING SUM(o.total_amount) > 500;
+
+```
+### 4. Applying Denormalization on Customer and Order Entities
+We can apply denormalization to Customer and Order entities to speed up data retrieval and reduce queries:
+
+Storing data in prebuilt files (JSON or XML)
+
+Combine all customer data and their orders into a single file per customer.
+
+Store the file on disk.
+
+When a customer logs in, fetch the file by ID → faster than querying multiple tables.
+
+Note: Must regenerate the file on any data update.
+
+Application-level caching (RAM or Disk, e.g., Redis / Memcached)
+
+Load customer data and orders into memory or cache.
+
+When a customer logs in, read directly from the cache → extremely fast.
+
+Note: Cache must be updated on any database changes to ensure data accuracy.
+
