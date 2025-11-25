@@ -176,8 +176,10 @@ SELECT
     SUM(o.total_amount) AS total_price
 FROM Customer c
 JOIN Orders o ON c.customer_id = o.customer_id
+WHERE o.order_date BETWEEN '2025-01-01' AND '2025-01-31'
 GROUP BY c.customer_id, c.first_name, c.last_name
 HAVING SUM(o.total_amount) > 500;
+
 
 ```
 ### 4. Applying Denormalization on Customer and Order Entities
