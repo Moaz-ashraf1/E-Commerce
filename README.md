@@ -265,6 +265,64 @@ VALUES (1243, 1234, 11, 3, 40);
 SELECT * FROM Order_Details;
 SELECT * FROM Sale_History;
 ```
+---
+
+### 6- transaction query to lock row with product id = 211 from being updated 
+
+### Particle Demonstration Using Two Database Sessions
+
+### Scenario Overview
+
+In this demonstration, we will explore how transaction locking works in SQL Server by using two separate database sessions.
+
+### Session 1: Initiating the Transaction
+
+In the first session, we start a transaction and perform an `UPDATE` on the `stock_quantity` field for the product with ID 211, but we do not change its value. This action will lock the row, preventing other sessions from updating it.
+
+```sql
+BEGIN TRANSACTION;
+UPDATE Product
+SET stock_quantity = stock_quantity
+WHERE product_id = 211;
+```
+
+### Session 2: Attempting the Update and Read
+
+In the second session, we attempt to update the same product’s `stock_quantity` and then read the product details.
+
+```sql
+BEGIN TRANSACTION;
+UPDATE Product
+SET stock_quantity = 100
+WHERE product_id = 211;
+
+SELECT * FROM Product WHERE product_id = 211;
+```
+
+---
+
+## Observed Behavior
+
+### 1. Case One: Reading Only
+
+When the second session only performs a `SELECT` operation on the product, it can read the data without any issues. The lock held by Session 1 does not prevent reading the data.
+
+### 2. Case Two: Update Only
+
+When the second session attempts to perform an `UPDATE` on the same product, the operation will be blocked. The update will wait indefinitely until Session 1 completes its transaction (either by `COMMIT` or `ROLLBACK`).
+
+### 3. Case Three: Update and Select in the Same Batch
+
+When the second session performs both an `UPDATE` and a `SELECT` in the same transaction, the entire batch will be blocked. The `UPDATE` will wait for Session 1 to finish its transaction, and the `SELECT` will also be blocked until the lock is released.
+
+---
+
+## Key Takeaways
+
+* **Write operations (UPDATE)** are blocked when a lock is held by another session.
+* **Read operations (SELECT)** are generally allowed, even if a lock is present, unless the read is combined with an update in the same transaction.
+* The second session will only proceed once the first session completes its transaction.
+
 
 
 
