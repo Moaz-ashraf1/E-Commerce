@@ -267,63 +267,59 @@ SELECT * FROM Sale_History;
 ```
 ---
 
-### 6- transaction query to lock row with product id = 211 from being updated 
+### 6- Transaction Lock Demonstration for Product ID 211 in SQL Server
 
-### Particle Demonstration Using Two Database Sessions
+1️⃣ Scenario Overview
 
-### Scenario Overview
+We demonstrate how SQL Server handles transaction locks using two separate sessions:
 
-In this demonstration, we will explore how transaction locking works in SQL Server by using two separate database sessions.
+Session 1: Initiates a transaction and locks the row by performing an UPDATE on stock_quantity without changing its value.
 
-### Session 1: Initiating the Transaction
+Session 2: Attempts to read or update the same row, showing how locks affect concurrent operations.
 
-In the first session, we start a transaction and perform an `UPDATE` on the `stock_quantity` field for the product with ID 211, but we do not change its value. This action will lock the row, preventing other sessions from updating it.
+2️⃣ Session 1: Initiating the Transaction
 
 ```sql
 BEGIN TRANSACTION;
+
+-- Lock the row without changing the value
 UPDATE Product
 SET stock_quantity = stock_quantity
 WHERE product_id = 211;
+
 ```
+This creates an exclusive lock on the row for Product ID 211.
+No other session can perform updates on this row until this transaction completes.
 
-### Session 2: Attempting the Update and Read
 
-In the second session, we attempt to update the same product’s `stock_quantity` and then read the product details.
+3️⃣ Session 2: Attempting to Read/Update
 
 ```sql
 BEGIN TRANSACTION;
+
+-- Attempt to update the same row
 UPDATE Product
 SET stock_quantity = 100
 WHERE product_id = 211;
 
-SELECT * FROM Product WHERE product_id = 211;
+-- Attempt to read the same row
+SELECT * FROM Product
+WHERE product_id = 211;
 ```
 
----
+4️⃣ Observed Behavior
 
-## Observed Behavior
+1. Reading Only:
+   - SELECT works normally; locks don’t prevent read operations.
 
-### 1. Case One: Reading Only
+2. Updating Only:
+   - UPDATE is blocked until Session 1 commits or rolls back.
 
-When the second session only performs a `SELECT` operation on the product, it can read the data without any issues. The lock held by Session 1 does not prevent reading the data.
+3. Update + Select in the Same Transaction:
+   - The entire transaction is blocked until Session 1 finishes.
 
-### 2. Case Two: Update Only
+5️⃣ Key Takeaways
 
-When the second session attempts to perform an `UPDATE` on the same product, the operation will be blocked. The update will wait indefinitely until Session 1 completes its transaction (either by `COMMIT` or `ROLLBACK`).
-
-### 3. Case Three: Update and Select in the Same Batch
-
-When the second session performs both an `UPDATE` and a `SELECT` in the same transaction, the entire batch will be blocked. The `UPDATE` will wait for Session 1 to finish its transaction, and the `SELECT` will also be blocked until the lock is released.
-
----
-
-## Key Takeaways
-
-* **Write operations (UPDATE)** are blocked when a lock is held by another session.
-* **Read operations (SELECT)** are generally allowed, even if a lock is present, unless the read is combined with an update in the same transaction.
-* The second session will only proceed once the first session completes its transaction.
-
-
-
-
-
+- Write operations (UPDATE) are blocked by locks held by other transactions.
+- Read operations (SELECT) are generally allowed unless combined with a write in the same transaction.
+  Using this technique helps prevent race conditions when multiple sessions try to update the same data     concurrently.
