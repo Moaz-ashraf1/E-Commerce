@@ -623,8 +623,7 @@ EXPLAIN
 ```
 
 EXPLAIN ANALYZE
-
-2.485 SEC
+⏱ Execution Time: ~ 2.485 sec
 
 ```sql
 '-> Limit: 1000 row(s)  (cost=1.2e+6 rows=1000) (actual time=2046..2473 rows=1000 loops=1)\n
@@ -645,8 +644,8 @@ EXPLAIN
 ```
 
 EXPLAIN ANALYZE
+⏱ Execution Time: ~ 0.406 sec
 
-0.406 SEC
 
 ```sql
 '-> Limit: 1000 row(s)  (cost=872740 rows=1000) (actual time=44..416 rows=1000 loops=1)\n
@@ -657,8 +656,7 @@ EXPLAIN ANALYZE
 ```
 
 MAKE INDEX DESC
-
-0.312 SEC
+⏱ Execution Time: ~ 0.312 sec
 
 ```sql
 '-> Limit: 1000 row(s)  (cost=867005 rows=1000) (actual time=39.6..308 rows=1000 loops=1)\n
@@ -673,4 +671,103 @@ MAKE INDEX DESC
 | `sql SELECT o.id AS order_id, o.order_date, c.id AS customer_id, c.name AS customer_name FROM orders o JOIN customers c ON o.customer_id = c.id ORDER BY o.order_date DESC LIMIT 1000;` | ~2.485 sec (EXPLAIN ANALYZE) | 1️⃣ Add index on `orders(order_date)` | `sql SELECT o.id AS order_id, o.order_date, c.id AS customer_id, c.name AS customer_name FROM orders o JOIN customers c ON o.customer_id = c.id ORDER BY o.order_date DESC LIMIT 1000;` | ~0.312 sec (EXPLAIN ANALYZE after index) |
 
 
+# TASK 4 – List of products that have low stock quantities
 
+```sql
+
+EXPLAIN ANALYZE  
+SELECT
+id, name, quantity
+FROM products
+WHERE quantity < 10;
+
+```
+
+EXPLAIN
+
+```sql
+# id, select_type, table, partitions, type, possible_keys, key, key_len, ref, rows, filtered, Extra
+'1', 'SIMPLE', 'products', NULL, 'ALL', NULL, NULL, NULL, NULL, '99951', '33.33', 'Using where'
+```
+
+EXPLAIN ANALYZE
+⏱ Execution Time: ~ 0.141 sec
+
+```sql
+'-> Filter: (products.quantity < 10)  (cost=10083 rows=33314) (actual time=0.344..127 rows=19919 loops=1)\n
+    -> Table scan on products  (cost=10083 rows=99951) (actual time=0.342..109 rows=100000 loops=1)\n'
+```
+
+ADD COVERING INDEX
+
+```sql
+CREATE INDEX idx_products_qty_cover
+ON products (quantity, id, name);
+```
+
+EXPLAIN
+
+```sql
+# id, select_type, table, partitions, type, possible_keys, key, key_len, ref, rows, filtered, Extra
+'1', 'SIMPLE', 'products', NULL, 'range', 'idx_products_qty_cover', 'idx_products_qty_cover', '4', NULL, '40236', '100.00', 'Using where; Using index'
+```
+
+EXPLAIN ANALYZE
+0.031 SEC
+
+```sql
+'-> Filter: (products.quantity < 10)  (cost=10060 rows=40236) (actual time=0.35..22.6 rows=19919 loops=1)\n
+    -> Covering index range scan on products using idx_products_qty_cover over (quantity < 10)  (cost=10060 rows=40236) (actual time=0.345..19.2 rows=19919 loops=1)\n'
+```
+
+✅ Pros
+
+Very fast read performance
+
+No table access (index-only scan)
+
+❌ Cons
+
+Increased index size
+
+Higher write cost (table is write-heavy)
+
+Every UPDATE on quantity, id, or name requires:
+
+Updating table data
+
+Updating all affected indexes
+
+Rebalancing B-tree structures
+
+This leads to:
+
+Higher CPU usage
+
+More I/O
+
+Longer locks
+
+Increased storage usage
+
+🔹 Final Decision: Simple Index on quantity
+
+Because the products table is write-heavy, a covering index is not ideal
+
+```sql
+CREATE INDEX idx_products_quantity
+ON products (quantity);
+```
+
+ EXPLAIN ANALYZE (Simple Index)
+⏱ Execution Time: ~0.109 sec
+
+```sql
+'-> Filter: (products.quantity < 10)  (cost=10083 rows=38100) (actual time=0.205..99.6 rows=19919 loops=1)
+    -> Table scan on products  (cost=10083 rows=99951) (actual time=0.183..84.2 rows=100000 loops=1)'
+```
+
+
+| Simple Query                                                       | Execution Time Before Optimization | Optimization Technique                                                                          | Rewrite Query                                                      | Execution Time After Optimization        |
+| ------------------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------- |
+| `sql SELECT id, name, quantity FROM products WHERE quantity < 10;` | ~0.141 sec (EXPLAIN ANALYZE)       | 1️⃣ Add index on `products(quantity)` <br> 2️⃣ Avoid covering index due to high write frequency | `sql SELECT id, name, quantity FROM products WHERE quantity < 10;` | ~0.109 sec (EXPLAIN ANALYZE after index) |
