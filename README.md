@@ -771,3 +771,68 @@ ON products (quantity);
 | Simple Query                                                       | Execution Time Before Optimization | Optimization Technique                                                                          | Rewrite Query                                                      | Execution Time After Optimization        |
 | ------------------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------- |
 | `sql SELECT id, name, quantity FROM products WHERE quantity < 10;` | ~0.141 sec (EXPLAIN ANALYZE)       | 1️⃣ Add index on `products(quantity)` <br> 2️⃣ Avoid covering index due to high write frequency | `sql SELECT id, name, quantity FROM products WHERE quantity < 10;` | ~0.109 sec (EXPLAIN ANALYZE after index) |
+
+
+
+# TASK 5 – Calculate the revenue generated from each product category
+
+```sql
+SELECT 
+c.id,
+c.name,
+SUM(od.quantity * od.price) AS total_revenue
+FROM categories c JOIN products p
+ON p.category_id = c.id
+JOIN order_details od 
+ON od.product_id = p.id
+GROUP BY c.id, c.name
+ORDER BY total_revenue DESC;
+```
+
+EXPLAIN 
+
+```sql
+1	SIMPLE	od		ALL					3043194	100.00	Using temporary; Using filesort
+1	SIMPLE	p		eq_ref	PRIMARY	PRIMARY	4	ecommerce.od.product_id	1	100.00	Using where
+1	SIMPLE	c		eq_ref	PRIMARY	PRIMARY	4	ecommerce.p.category_id	1	100.00	
+```
+
+EXPLAIN ANALYZE
+⏱ Execution Time: ~ 21.485  sec
+```sql
+'-> Sort: total_revenue DESC  (actual time=21474..21474 rows=5 loops=1)\n    -> Table scan on <temporary>  (actual time=21474..21474 rows=5 loops=1)\n        -> Aggregate using temporary table  (actual time=21474..21474 rows=5 loops=1)\n
+            -> Nested loop inner join  (cost=2.44e+6 rows=3.04e+6) (actual time=10.6..15760 rows=3.05e+6 loops=1)\n                -> Nested loop inner join  (cost=1.38e+6 rows=3.04e+6) (actual time=10.6..11078 rows=3.05e+6 loops=1)\n
+                                -> Table scan on od  (cost=311634 rows=3.04e+6) (actual time=10.5..3048 rows=3.05e+6 loops=1)\n                    -> Filter: (od.product_id = p.id)  (cost=0.25 rows=1) (actual time=0.00229..0.0024 rows=1 loops=3.05e+6)\n
+                                                        -> Single-row index lookup on p using PRIMARY (id=od.product_id)  (cost=0.25 rows=1) (actual time=0.00208..0.00211 rows=1 loops=3.05e+6)\n
+                                                                        -> Single-row index lookup on c using PRIMARY (id=p.category_id)  (cost=0.25 rows=1) (actual time=0.00128..0.00132 rows=1 loops=3.05e+6)\n'
+
+```
+
+USE Summary Table / Materialized View
+
+```sql
+CREATE TABLE category_revenue AS
+SELECT c.id AS category_id,
+SUM(od.quantity*od.price) AS total_revenue
+FROM categories c
+JOIN products p ON p.category_id = c.id
+JOIN order_details od ON od.product_id = p.id
+GROUP BY  c.id;
+
+
+SELECT *
+FROM category_revenue
+ORDER BY total_revenue DESC;
+```
+
+EXPLAIN ANALYZE
+⏱ Execution Time: ~ 0.101  sec
+
+```sql
+'-> Sort: category_revenue.total_revenue DESC  (cost=0.75 rows=5) (actual time=0.101..0.101 rows=5 loops=1)\n
+   -> Table scan on category_revenue  (cost=0.75 rows=5) (actual time=0.0465..0.0633 rows=5 loops=1)\n'
+```
+
+| Simple Query                                                                                                                                                                                                                        | Execution Time Before Optimization | Optimization Technique                                                   | Rewrite Query                                                                                                                                    | Execution Time After Optimization |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
+| `sql SELECT c.id, c.name, SUM(od.quantity * od.price) AS total_revenue FROM categories c JOIN products p ON p.category_id = c.id JOIN order_details od ON od.product_id = p.id GROUP BY c.id, c.name ORDER BY total_revenue DESC; ` | ~21.5 sec (EXPLAIN ANALYZE)        | 1️⃣ Pre-aggregate data using a Summary Table (Materialized View pattern) | `sql SELECT c.id, c.name, cr.total_revenue FROM category_revenue cr JOIN categories c ON c.id = cr.category_id ORDER BY cr.total_revenue DESC; ` | ~0.1 sec                          |
